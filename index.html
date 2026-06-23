@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>スナック ココ</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>html,body{height:100%;margin:0;background:#160c22;}#root{height:100%;}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect } = React;
+
+// ---- キャスト（スナック ココ：ママ＋女の子3人） ----------------------
+const CAST = {
+  mama:   { name: "ココママ", tag: "店長・玲子", color: "#ff6fae", glow: "#ffb3d9", emoji: "👑", pitch: 1.0,  rate: 0.99 },
+  nene:   { name: "ネネ",     tag: "癒し系",     color: "#7fd1a8", glow: "#bdf0d6", emoji: "🌸", pitch: 1.35, rate: 0.92 },
+  sukeko: { name: "すけこ",   tag: "クール系",   color: "#c489e6", glow: "#e0b8f5", emoji: "😎", pitch: 0.9,  rate: 0.98 },
+  moko:   { name: "モコ",     tag: "元気担当",   color: "#5cc7e0", glow: "#a6e9f5", emoji: "⭐", pitch: 1.25, rate: 0.98 },
+};
+
+// ---- メニューと価格（コイン） -----------------------------------------
+const MENU = [
+  { key: "beer",   label: "生ビール",   price: 100, line: "生ビールちょうだい！" },
+  { key: "high",   label: "ハイボール", price: 120, line: "ハイボールで！" },
+  { key: "mizu",   label: "水割り",     price: 120, line: "水割りお願い。" },
+  { key: "oolong", label: "ウーロン茶", price: 80,  line: "ウーロン茶ください。" },
+  { key: "kanpai", label: "乾杯ショット", price: 150, line: "みんなで乾杯しよ！" },
+  { key: "karaoke",label: "🎤 一曲歌う", price: 100, line: "一曲歌っちゃうね！" },
+];
+const BOTTLE = { name: "スパークリングボトル", price: 800, servings: 8, pourPrice: 40, pourLine: "ボトルから一杯ちょうだい♪" };
+const START_COINS = 1500;
+const CHARGE_OPTIONS = [500, 1000, 3000];
+
+const CAST_PROMPT = `あなたは「スナック ココ」という、昭和レトロな雰囲気もありつつ令和っぽくポップで楽しいスナックの女性スタッフたちです。お客さん（ユーザー）が話しかけてくるので、登場人物になりきって会話を返してください。
+
+【登場人物】（全員女性）
+- mama（ココママ・玲子, 店長）: お店をまとめる頼れる明るいお姉さん。面倒見がよく、さりげなく褒め上手。ノリは軽いが芯がある。
+- nene（ネネ）: おっとり系の癒しタイプ。歳の割に声は高めで、ふんわり柔らかい優しい話し方。急がず和ませる。
+- sukeko（すけこ）: 見た目はクールでさばさばしているが、実は面白いこと・笑える話が大好き。ノリツッコミもできる、ギャップのあるキャラ。
+- moko（モコ）: 元気いっぱいで明るいが、早口ではなくマイペース。のんびりした明るさで場をあたためる。
+
+【ルール】
+- 毎回全員は喋らない。流れで1〜3人だけが自然に反応する。
+- 1人のセリフは短め（1〜2文）。声で読むのでテンポよく、それぞれの個性が出る砕けた口語で。
+- 健全でPGな内容のみ。楽しく飲んでおしゃべりする場。
+- お酒の注文には嬉しそうに反応する。
+- 【お客さんの記憶】が渡されたら、それを自然に会話に活かす。名前が分かっていれば名前で呼ぶ。来店回数が多いほどフランクに、初回は明るく歓迎しつつやや控えめに。わざとらしく全部を並べず、さりげなく触れる。
+
+【記憶の更新】
+- 会話からお客さんについて新しく分かったこと（名前・好きなお酒・仕事・趣味・近況など）があれば、memoryに入れて返す。
+- name: 名前や呼ばれ方が分かったときだけ。fav: 好きなお酒が分かったときだけ。note: 今回の会話で覚えておくと良い一言メモ（無ければ空文字）。
+- 分からないものは空文字 "" にする。推測で埋めない。
+
+- 出力は必ず次のJSONのみ。前後に説明や記号を付けない:
+{"replies":[{"id":"mama","text":"…"}],"memory":{"name":"","fav":"","note":""}}`;
+
+const WELCOME = [
+  { id: "mama", text: "いらっしゃ〜い！スナック ココへようこそ♡ まずは座って、好きなもの頼んでね。" },
+  { id: "moko", text: "わー、来てくれてありがとー！下のメニューから選べるよ✨" },
+];
+
+// 店内BGM：あなたのオリジナル曲メドレー（YouTube）
+const YT_TRACKS = [
+  { id: "6_qHbcYRflk", name: "オリジナル曲メドレー ①" },
+  { id: "kWf6eckZO5s", name: "オリジナル曲メドレー ②" },
+];
+
+// BGMはプレビュー枠だと不安定なので今は非表示。公開時に true にすれば復活する。
+const BGM_ENABLED = false;
+
+// 保存は端末のlocalStorageを使う（公開サイト版）
+const storage = {
+  get: async (k) => { try { const v = localStorage.getItem(k); return v == null ? null : { key: k, value: v }; } catch { return null; } },
+  set: async (k, val) => { try { localStorage.setItem(k, val); } catch {} return { key: k }; },
+};
+
+function App() {
+  const [messages, setMessages] = useState(WELCOME.map((m) => ({ role: "cast", ...m })));
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(null);
+  const [micNote, setMicNote] = useState("");
+  const [apiErr, setApiErr] = useState("");
+  const [voices, setVoices] = useState([]);
+  const [voiceMap, setVoiceMap] = useState({ mama: "", nene: "", sukeko: "", moko: "" });
+
+  // 店内BGM（YouTube）
+  const [trackIdx, setTrackIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [bgmVol, setBgmVol] = useState(0.35);
+  const [showBgm, setShowBgm] = useState(false);
+  const [ytReady, setYtReady] = useState(false);
+  const [ytActive, setYtActive] = useState(false);
+  const ytIframeRef = useRef(null);
+  const trackIdxRef = useRef(0);
+  const bgmVolRef = useRef(0.35);
+  useEffect(() => { trackIdxRef.current = trackIdx; }, [trackIdx]);
+  useEffect(() => { bgmVolRef.current = bgmVol; }, [bgmVol]);
+  const [showVoices, setShowVoices] = useState(false);
+
+  // 財布＋記憶（保存対象）
+  const [wallet, setWallet] = useState({ coins: START_COINS, bottle: null, visits: 1, totalSpent: 0, name: "", fav: "", notes: [] });
+  const [sessionSpent, setSessionSpent] = useState(0);
+  const [showBill, setShowBill] = useState(false);
+
+  const scroller = useRef(null);
+  const voiceOnRef = useRef(true);
+  const voiceMapRef = useRef({});
+  const voicesRef = useRef([]);
+  const recRef = useRef(null);
+
+  useEffect(() => { voiceOnRef.current = voiceOn; }, [voiceOn]);
+  useEffect(() => { voiceMapRef.current = voiceMap; }, [voiceMap]);
+  useEffect(() => { voicesRef.current = voices; }, [voices]);
+
+  // 保存された残高・記憶を読み込む（無ければ新規）
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await storage.get("snack:wallet");
+        if (r && r.value) {
+          const w = JSON.parse(r.value);
+          const next = { coins: w.coins ?? START_COINS, bottle: w.bottle ?? null, visits: (w.visits || 1) + 1, totalSpent: w.totalSpent || 0, name: w.name || "", fav: w.fav || "", notes: Array.isArray(w.notes) ? w.notes : [] };
+          setWallet(next);
+          persist(next);
+          greetReturning(next);
+          return;
+        }
+      } catch { /* 初回はキーが無くて例外 → 下で新規作成 */ }
+      const fresh = { coins: START_COINS, bottle: null, visits: 1, totalSpent: 0, name: "", fav: "", notes: [] };
+      setWallet(fresh);
+      persist(fresh);
+    })();
+  }, []);
+
+  // 常連が来たら、名前や前回の話に触れて出迎える（AIを使わず即時・無料）
+  function greetReturning(w) {
+    const who = w.name ? `${w.name}さん` : "あなた";
+    const lastNote = w.notes && w.notes.length ? w.notes[w.notes.length - 1] : "";
+    let line = w.visits >= 5
+      ? `あら${who}、いらっしゃい！またこの席で待ってたわよ。`
+      : `あら${who}、お久しぶり。よく来てくれたわね。`;
+    if (lastNote) line += `そういえば、${lastNote}…その後どう？`;
+    const greet = [{ role: "cast", id: "mama", text: line }];
+    if (w.fav) greet.push({ role: "cast", id: "moko", text: `いつもの${w.fav}、用意しときますか？♪` });
+    setMessages(greet);
+    speakReplies(greet);
+  }
+
+  async function persist(w) {
+    try { await storage.set("snack:wallet", JSON.stringify(w)); } catch { /* 保存不可でもセッションは継続 */ }
+  }
+
+  // 日本語の音声を集め、キャラごとに割り当てる
+  useEffect(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const load = async () => {
+      const ja = synth.getVoices()
+        .filter((v) => v.lang === "ja-JP" || v.lang?.startsWith("ja"))
+        .sort((a, b) => scoreVoice(b) - scoreVoice(a));
+      if (!ja.length) return;
+      setVoices(ja);
+
+      // 保存済みの「キャラ→声」対応表があれば復元
+      let saved = null;
+      try {
+        const r = await storage.get("snack:voices");
+        if (r && r.value) saved = JSON.parse(r.value);
+      } catch { /* 無ければ初期割り当て */ }
+
+      setVoiceMap((prev) => {
+        const ids = Object.keys(CAST);
+        const next = { ...prev };
+        ids.forEach((id, i) => {
+          // 優先順位: 保存値 → 既存値 → 声が複数あれば別々に割り当て → 無ければ先頭
+          const fromSaved = saved && ja.find((v) => v.name === saved[id]) ? saved[id] : "";
+          next[id] = fromSaved || prev[id] || (ja[i % ja.length]?.name) || ja[0].name;
+        });
+        return next;
+      });
+    };
+    load();
+    synth.onvoiceschanged = load;
+    return () => { synth.onvoiceschanged = null; };
+  }, []);
+
+  function saveVoiceMap(map) {
+    try { storage.set("snack:voices", JSON.stringify(map)); } catch { /* セッションは継続 */ }
+  }
+  function setCastVoice(id, name) {
+    const next = { ...voiceMap, [id]: name };
+    setVoiceMap(next); saveVoiceMap(next);
+  }
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+  }, [messages, busy]);
+
+  // ---- 店内BGM（YouTube直接埋め込み方式：サンドボックスでも鳴る） ----
+  useEffect(() => { setYtReady(true); }, []); // スクリプト読み込み不要
+
+  function ytEmbedSrc(id) {
+    return `https://www.youtube-nocookie.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1`;
+  }
+  function ytPost(func, args = []) {
+    const w = ytIframeRef.current?.contentWindow;
+    if (!w) return;
+    try { w.postMessage(JSON.stringify({ event: "command", func, args }), "*"); } catch { /* noop */ }
+  }
+
+  useEffect(() => { // 音量＋ダッキング（喋ってる間はBGMを下げる・best-effort）
+    if (!ytActive) return;
+    const vol = Math.round(Math.max(0, Math.min(1, speaking ? bgmVol * 0.3 : bgmVol)) * 100);
+    ytPost("setVolume", [vol]);
+  }, [bgmVol, speaking, ytActive, trackIdx]);
+
+  function loadTrack(i) { setTrackIdx(i); setYtActive(true); setPlaying(true); }
+  function nextTrack() { loadTrack((trackIdxRef.current + 1) % YT_TRACKS.length); }
+  function prevTrack() { loadTrack((trackIdxRef.current - 1 + YT_TRACKS.length) % YT_TRACKS.length); }
+  function togglePlay() {
+    if (!ytActive) { setYtActive(true); setPlaying(true); return; } // 初回タップで埋め込み生成＆再生
+    if (playing) { ytPost("pauseVideo"); setPlaying(false); }
+    else { ytPost("playVideo"); setPlaying(true); }
+  }
+
+  // キャラ→声 の対応表から、そのキャラの声を引く
+  function voiceForCast(id) {
+    const name = voiceMapRef.current[id];
+    return voicesRef.current.find((v) => v.name === name) || voicesRef.current[0] || null;
+  }
+
+  function speakReplies(replies) {
+    const synth = window.speechSynthesis;
+    if (!synth || !voiceOnRef.current) return;
+    synth.cancel();
+    replies.forEach((r) => {
+      const c = CAST[r.id] || CAST.mama;
+      const v = voiceForCast(r.id);
+      r.text.split(/(?<=[。！？、])/).filter(Boolean).forEach((chunk, idx, arr) => {
+        const u = new SpeechSynthesisUtterance(chunk);
+        u.lang = "ja-JP";
+        if (v) u.voice = v;
+        u.pitch = c.pitch; u.rate = c.rate;
+        if (idx === 0) u.onstart = () => setSpeaking(r.id);
+        if (idx === arr.length - 1) u.onend = () => setSpeaking((s) => (s === r.id ? null : s));
+        synth.speak(u);
+      });
+    });
+  }
+
+  // 設定画面で、そのキャラの声をその場で試聴
+  function testCastVoice(id) {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel();
+    const c = CAST[id] || CAST.mama;
+    const samples = { mama: "いらっしゃい！ゆっくりしてってね♡", nene: "わぁ…来てくれて、嬉しいです〜。", sukeko: "お、いらっしゃい。…って、その顔、なんかあったでしょ。", moko: "やっほー、来てくれたんだ〜。ゆっくりしてってね。" };
+    const u = new SpeechSynthesisUtterance(samples[id] || "こんばんは。");
+    u.lang = "ja-JP";
+    const v = voicesRef.current.find((vv) => vv.name === voiceMap[id]) || voicesRef.current[0];
+    if (v) u.voice = v;
+    u.pitch = c.pitch; u.rate = c.rate;
+    synth.speak(u);
+  }
+
+  function pushCast(id, text, speak = true) {
+    const line = { role: "cast", id, text };
+    setMessages((m) => [...m, line]);
+    if (speak) speakReplies([line]);
+  }
+
+  // ---- お金まわり ----
+  function spend(amount) {
+    const next = { ...wallet, coins: wallet.coins - amount, totalSpent: wallet.totalSpent + amount };
+    setWallet(next); persist(next);
+    setSessionSpent((s) => s + amount);
+  }
+  function charge(amount) {
+    const next = { ...wallet, coins: wallet.coins + amount };
+    setWallet(next); persist(next);
+  }
+  function brokePrompt() {
+    pushCast("mama", "あら、コインが少なくなってきたみたい。チャージするか、そろそろお会計にする？ 無理しなくていいのよ。");
+    setShowBill(true);
+  }
+
+  function order(item) {
+    if (busy) return;
+    if (wallet.coins < item.price) { brokePrompt(); return; }
+    spend(item.price);
+    send(item.line);
+  }
+  function pour() {
+    if (busy || !wallet.bottle || wallet.bottle.servingsLeft <= 0) return;
+    if (wallet.coins < BOTTLE.pourPrice) { brokePrompt(); return; }
+    const next = { ...wallet, coins: wallet.coins - BOTTLE.pourPrice, totalSpent: wallet.totalSpent + BOTTLE.pourPrice, bottle: { ...wallet.bottle, servingsLeft: wallet.bottle.servingsLeft - 1 } };
+    setWallet(next); persist(next); setSessionSpent((s) => s + BOTTLE.pourPrice);
+    send(BOTTLE.pourLine);
+  }
+  function buyBottle() {
+    if (wallet.coins < BOTTLE.price) { brokePrompt(); return; }
+    const next = { ...wallet, coins: wallet.coins - BOTTLE.price, totalSpent: wallet.totalSpent + BOTTLE.price, bottle: { name: BOTTLE.name, servingsLeft: BOTTLE.servings } };
+    setWallet(next); persist(next); setSessionSpent((s) => s + BOTTLE.price);
+    setShowBill(false);
+    pushCast("mama", "ボトルキープね、ありがとう。次からはこのボトルから出すわね。");
+  }
+
+  // ---- 音声入力 ----
+  function toggleMic() {
+    if (listening) { recRef.current?.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setMicNote("このブラウザは音声入力に未対応です。文字で話しかけてね。"); return; }
+    setMicNote("");
+    const rec = new SR();
+    rec.lang = "ja-JP"; rec.interimResults = false; rec.maxAlternatives = 1;
+    rec.onresult = (e) => send(e.results[0][0].transcript);
+    rec.onerror = () => { setListening(false); setMicNote("うまく聞き取れませんでした。もう一度どうぞ。"); };
+    rec.onend = () => setListening(false);
+    recRef.current = rec;
+    try { rec.start(); setListening(true); } catch { setListening(false); }
+  }
+
+  // ---- AIに会話させる ----
+  async function send(text) {
+    const content = (text || "").trim();
+    if (!content || busy) return;
+    const next = [...messages, { role: "user", text: content }];
+    setMessages(next); setInput(""); setBusy(true); setApiErr("");
+
+    const history = next.slice(-12)
+      .map((m) => (m.role === "user" ? `お客さん: ${m.text}` : `${CAST[m.id]?.name ?? m.id}: ${m.text}`))
+      .join("\n");
+
+    // ママたちに渡す「お客さんの記憶」
+    const mem = [
+      wallet.name ? `名前/呼び方: ${wallet.name}` : "名前: まだ知らない",
+      wallet.fav ? `好きなお酒: ${wallet.fav}` : "",
+      wallet.bottle ? `キープボトル: ${wallet.bottle.name}（残り${wallet.bottle.servingsLeft}杯）` : "",
+      `来店回数: ${wallet.visits}回目`,
+      wallet.notes && wallet.notes.length ? `過去のメモ: ${wallet.notes.slice(-5).join(" / ")}` : "",
+    ].filter(Boolean).join("\n");
+
+    const prompt = `${CAST_PROMPT}\n\n【お客さんの記憶】\n${mem}\n\n【これまでの会話】\n${history}\n\n上の「お客さん」の最新の発言に、JSONで返してください。`;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const bodyText = await res.text();
+      if (!res.ok) { setApiErr(`接続エラー HTTP ${res.status}`); const fb = fallback(); setMessages((m) => [...m, ...fb]); speakReplies(fb); return; }
+      const data = JSON.parse(bodyText);
+      const textOut = (data.text || "").trim();
+      let replies = [];
+      const s = textOut.indexOf("{"), e = textOut.lastIndexOf("}");
+      if (s !== -1 && e > s) {
+        try {
+          const parsed = JSON.parse(textOut.slice(s, e + 1));
+          replies = (parsed.replies || []).filter((r) => CAST[r.id] && r.text).map((r) => ({ role: "cast", id: r.id, text: r.text }));
+          if (parsed.memory) absorbMemory(parsed.memory);
+        } catch { /* fallthrough */ }
+      }
+      if (replies.length === 0 && textOut) replies = [{ role: "cast", id: "mama", text: textOut.slice(0, 120) }];
+      const out = replies.length ? replies : fallback();
+      setMessages((m) => [...m, ...out]);
+      speakReplies(out);
+    } catch (err) {
+      setApiErr(`通信に失敗: ${err?.message || err}`);
+      const fb = fallback(); setMessages((m) => [...m, ...fb]); speakReplies(fb);
+    } finally { setBusy(false); }
+  }
+
+  // AIが返してきた記憶を取り込む
+  function absorbMemory(m) {
+    setWallet((w) => {
+      const next = { ...w };
+      if (m.name && !w.name) next.name = String(m.name).slice(0, 20);
+      if (m.fav) next.fav = String(m.fav).slice(0, 24);
+      if (m.note) {
+        const note = String(m.note).slice(0, 60);
+        const notes = [...(w.notes || [])];
+        if (note && notes[notes.length - 1] !== note) notes.push(note);
+        next.notes = notes.slice(-8); // 直近8件だけ保持
+      }
+      persist(next);
+      return next;
+    });
+  }
+
+  // ママの記憶をリセット（テスト用・プライバシー配慮）
+  function resetMemory() {
+    const next = { ...wallet, name: "", fav: "", notes: [] };
+    setWallet(next); persist(next);
+  }
+  function fallback() { return [{ role: "cast", id: "mama", text: "あら、ちょっと電波が悪いみたい。もう一回言ってくれる？" }]; }
+
+  const yen = (n) => n.toLocaleString();
+
+  return (
+    <div style={S.root}>
+      <style>{CSS}</style>
+
+      <header style={S.header}>
+        <button style={S.coinPill} onClick={() => setShowBill(true)} title="お会計">🪙 {yen(wallet.coins)}</button>
+        <button style={S.voiceBtn} onClick={() => { const n = !voiceOn; setVoiceOn(n); if (!n) { window.speechSynthesis?.cancel(); setSpeaking(null); } }}>{voiceOn ? "🔊" : "🔇"}</button>
+        <div style={S.neonSub}>SNACK</div>
+        <div style={S.neon}>ココ</div>
+        <div style={S.roster}>
+          {Object.values(CAST).map((c) => (
+            <span key={c.name} style={{ ...S.chip, borderColor: c.color, color: c.glow }}>{c.emoji} {c.name}</span>
+          ))}
+        </div>
+        <div style={S.voicePicker}>
+          <button style={S.voiceCfgBtn} onClick={() => setShowVoices(true)}>🎚 キャラの声を設定</button>
+          {BGM_ENABLED && <button style={S.voiceCfgBtn} onClick={() => setShowBgm(true)}>🎵 BGM</button>}
+        </div>
+        {ytActive && playing && (
+          <div style={S.nowPlaying}>♪ いま流れてる: {YT_TRACKS[trackIdx].name}</div>
+        )}
+      </header>
+
+      {/* 常駐ミニプレーヤー（閉じても鳴り続ける） */}
+      {ytActive && (
+        <div style={S.ytMini}>
+          <iframe
+            ref={ytIframeRef}
+            key={trackIdx}
+            src={ytEmbedSrc(YT_TRACKS[trackIdx].id)}
+            title="店内BGM"
+            allow="autoplay; encrypted-media"
+            style={{ width: "100%", height: "100%", border: 0 }}
+            onLoad={() => setTimeout(() => ytPost("setVolume", [Math.round(bgmVol * 100)]), 800)}
+          />
+        </div>
+      )}
+
+      <main ref={scroller} style={S.main}>
+        {messages.map((m, i) =>
+          m.role === "user"
+            ? <div key={i} style={S.userRow}><div style={S.userBubble}>{m.text}</div></div>
+            : <CastBubble key={i} m={m} speaking={speaking === m.id} />
+        )}
+        {busy && (
+          <div style={S.typing}><span className="dot" /><span className="dot" /><span className="dot" /><span style={{ marginLeft: 8, opacity: 0.6 }}>カウンターから返事が…</span></div>
+        )}
+      </main>
+
+      {micNote && <div style={S.note}>{micNote}</div>}
+      {apiErr && <div style={S.errNote}>⚠ {apiErr}</div>}
+
+      {/* メニュー */}
+      <div style={S.menuRow}>
+        {wallet.bottle && wallet.bottle.servingsLeft > 0 && (
+          <button style={{ ...S.menuItem, borderColor: "#dcab53" }} onClick={pour} disabled={busy}>
+            <span>🥃 ボトルから</span><span style={S.price}>🪙{BOTTLE.pourPrice}・残{wallet.bottle.servingsLeft}</span>
+          </button>
+        )}
+        {MENU.map((it) => (
+          <button key={it.key} style={S.menuItem} onClick={() => order(it)} disabled={busy}>
+            <span>{it.label}</span><span style={S.price}>🪙{it.price}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={S.inputBar}>
+        <button style={{ ...S.micBtn, ...(listening ? S.micOn : {}) }} onClick={toggleMic} disabled={busy}>{listening ? "■" : "🎙"}</button>
+        <input style={S.input} placeholder={listening ? "聞いてます…" : "話しかける（声 or 文字）"} value={input}
+          onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send(input)} disabled={busy} />
+        <button style={S.sendBtn} onClick={() => send(input)} disabled={busy || !input.trim()}>話す</button>
+      </div>
+
+      {/* お会計パネル */}
+      {showBill && (
+        <div style={S.overlay} onClick={() => setShowBill(false)}>
+          <div style={S.bill} onClick={(e) => e.stopPropagation()}>
+            <div style={S.billTitle}>お会計 — スナック ココ</div>
+            <Row label="今夜のお遊び" value={`🪙 ${yen(sessionSpent)}`} />
+            <Row label="コイン残高" value={`🪙 ${yen(wallet.coins)}`} big />
+            <Row label="ボトルキープ" value={wallet.bottle ? `${wallet.bottle.name}（残り${wallet.bottle.servingsLeft}杯）` : "なし"} />
+            <Row label="来店" value={`${wallet.visits}回目`} />
+
+            <div style={S.billSec}>ママの記憶</div>
+            <Row label="名前" value={wallet.name || "（まだ覚えていない）"} />
+            <Row label="好きなお酒" value={wallet.fav || "（まだ知らない）"} />
+            {wallet.notes && wallet.notes.length > 0 && (
+              <div style={S.memoBox}>
+                {wallet.notes.slice(-5).map((n, i) => <div key={i} style={S.memoLine}>・{n}</div>)}
+              </div>
+            )}
+            <button style={S.resetBtn} onClick={resetMemory}>記憶をリセット</button>
+
+            <div style={S.billSec}>チャージ <span style={{ opacity: 0.5, fontSize: 11 }}>（デモ）</span></div>
+            <div style={S.chargeRow}>
+              {CHARGE_OPTIONS.map((n) => (
+                <button key={n} style={S.chargeBtn} onClick={() => charge(n)}>+🪙{yen(n)}</button>
+              ))}
+            </div>
+
+            {!wallet.bottle && (
+              <button style={S.bottleBtn} onClick={buyBottle}>🍶 {BOTTLE.name}をキープ（🪙{BOTTLE.price} / {BOTTLE.servings}杯）</button>
+            )}
+
+            <div style={S.billNote}>
+              ※ これは仕組みのデモです。「チャージ」は今は練習用にコインが増えるだけ。<br />
+              公開時にここへ Stripe などの決済を繋げば、本物の課金になります。
+            </div>
+            <button style={S.closeBtn} onClick={() => setShowBill(false)}>閉じる</button>
+          </div>
+        </div>
+      )}
+
+      {/* 声設定パネル（キャラ→声 の対応表） */}
+      {showVoices && (
+        <div style={S.overlay} onClick={() => setShowVoices(false)}>
+          <div style={S.bill} onClick={(e) => e.stopPropagation()}>
+            <div style={S.billTitle}>キャラの声を設定</div>
+            {voices.length === 0 && <div style={{ fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" }}>この端末で使える日本語音声を読み込み中…</div>}
+            {Object.entries(CAST).map(([id, c]) => (
+              <div key={id} style={S.vRow}>
+                <span style={{ ...S.vAvatar, background: c.color }}>{c.emoji}</span>
+                <span style={{ width: 64, fontWeight: 700, color: c.glow, fontSize: 13 }}>{c.name}</span>
+                <select style={S.vSelect} value={voiceMap[id] || ""} onChange={(e) => setCastVoice(id, e.target.value)}>
+                  {voices.map((v) => <option key={v.name} value={v.name}>{v.name}{v.localService === false ? " ✨" : ""}</option>)}
+                </select>
+                <button style={S.vTest} onClick={() => testCastVoice(id)}>🔈</button>
+              </div>
+            ))}
+            <div style={S.billNote}>
+              ✨ が付いた声はネットワーク音声で、いちばん滑らかです。<br />
+              ※ 今は端末内蔵の声を割り当てています。公開時にこの対応表をそのまま<b>ニューラル音声（Google / ElevenLabs 等）</b>に差し替えれば、4人を本当に別人の声にできます。
+            </div>
+            <button style={S.closeBtn} onClick={() => setShowVoices(false)}>閉じる</button>
+          </div>
+        </div>
+      )}
+
+      {/* BGMパネル */}
+      {showBgm && (
+        <div style={S.overlay} onClick={() => setShowBgm(false)}>
+          <div style={S.bill} onClick={(e) => e.stopPropagation()}>
+            <div style={S.billTitle}>店内BGM</div>
+            <div style={{ fontSize: 12, opacity: 0.7, textAlign: "center", marginBottom: 14 }}>あなたのオリジナル曲メドレーが流れます</div>
+
+            {!ytReady && <div style={{ fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" }}>プレーヤーを準備中…</div>}
+
+            <div style={S.playerRow}>
+              <button style={S.pBtn} onClick={prevTrack} disabled={!ytActive}>⏮</button>
+              <button style={{ ...S.pBtn, ...S.pBtnMain }} onClick={togglePlay} disabled={!ytReady}>
+                {!ytActive ? "▶" : (playing ? "⏸" : "▶")}
+              </button>
+              <button style={S.pBtn} onClick={nextTrack} disabled={!ytActive}>⏭</button>
+            </div>
+            {!ytActive && <div style={{ fontSize: 11, opacity: 0.6, textAlign: "center", marginBottom: 12 }}>▶ を押すとお店に音楽が流れ始めます</div>}
+
+            <div style={S.volRow}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>BGM音量</span>
+              <input type="range" min="0" max="1" step="0.05" value={bgmVol} onChange={(e) => setBgmVol(parseFloat(e.target.value))} style={{ flex: 1 }} />
+              <span style={{ fontSize: 12, width: 34, textAlign: "right" }}>{Math.round(bgmVol * 100)}%</span>
+            </div>
+
+            <div style={S.trackList}>
+              {YT_TRACKS.map((t, i) => (
+                <button key={t.id} style={{ ...S.trackItem, ...(i === trackIdx && ytActive ? S.trackActive : {}) }}
+                  onClick={() => loadTrack(i)}>
+                  {i === trackIdx && playing ? "♪ " : ""}{t.name}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              {YT_TRACKS.map((t, i) => (
+                <a key={t.id} href={`https://www.youtube.com/watch?v=${t.id}`} target="_blank" rel="noreferrer" style={S.ytLink}>
+                  ↗ メドレー{i === 0 ? "①" : "②"}をYouTubeで開く
+                </a>
+              ))}
+            </div>
+
+            <div style={S.billNote}>
+              ※ あなたの自作曲なので使用は自由です。今はYouTubeから再生しているので<b>置き場所いらず・費用ゼロ</b>。<br />
+              もし枠内で鳴らない時は、上の「YouTubeで開く」から再生できます。本番で音質・頭出し・曲名表示を作り込むなら、mp3＋R2の形に差し替えます。
+            </div>
+            <button style={S.closeBtn} onClick={() => setShowBgm(false)}>閉じる</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value, big }) {
+  return (
+    <div style={S.row}>
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      <span style={{ fontWeight: 700, fontSize: big ? 18 : 14, color: big ? "#f3d489" : "#f6ecdf" }}>{value}</span>
+    </div>
+  );
+}
+
+function CastBubble({ m, speaking }) {
+  const c = CAST[m.id] || CAST.mama;
+  return (
+    <div style={S.castRow}>
+      <div className={speaking ? "speaking" : ""} style={{ ...S.avatar, background: c.color, boxShadow: `0 0 14px ${c.color}`, ["--gw"]: c.glow }}>{c.emoji}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={S.nameTag}>
+          <span style={{ color: c.glow, fontWeight: 700 }}>{c.name}</span>
+          <span style={S.subTag}>{c.tag}</span>
+          {speaking && <span style={{ ...S.subTag, color: c.glow }}>♪ 話し中</span>}
+        </div>
+        <div style={{ ...S.castBubble, borderColor: c.color }}>{m.text}</div>
+      </div>
+    </div>
+  );
+}
+
+function scoreVoice(v) {
+  let s = 0;
+  if (v.localService === false) s += 3;
+  if (/google|natural|neural|wavenet|enhanced|premium|online|siri|kyoko|o-?ren/i.test(v.name)) s += 2;
+  return s;
+}
+
+const S = {
+  root: { position: "relative", maxWidth: 480, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "radial-gradient(130% 65% at 50% -8%, #7a2e74 0%, rgba(122,46,116,0) 55%), radial-gradient(90% 50% at 100% 0%, #3a2a7a 0%, rgba(58,42,122,0) 45%), linear-gradient(180deg, #251038 0%, #170c22 100%)", color: "#f6e8f1", fontFamily: "'Zen Maru Gothic','Hiragino Sans','Noto Sans JP',sans-serif", overflow: "hidden" },
+  header: { position: "relative", padding: "16px 16px 10px", textAlign: "center", borderBottom: "1px solid #3a2230" },
+  coinPill: { position: "absolute", left: 12, top: 12, background: "rgba(243,212,137,0.14)", border: "1px solid #6a4b2e", color: "#f3d489", fontWeight: 700, fontSize: 13, padding: "6px 11px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit" },
+  voiceBtn: { position: "absolute", right: 12, top: 12, background: "rgba(255,255,255,0.08)", border: "1px solid #5a3a48", borderRadius: 10, fontSize: 15, padding: "5px 9px", cursor: "pointer" },
+  neonSub: { letterSpacing: 6, fontSize: 11, color: "#ffd1ec", opacity: 0.85, marginTop: 6 },
+  neon: { fontFamily: "'Zen Maru Gothic','Hiragino Sans',sans-serif", fontSize: 34, fontWeight: 700, color: "#ffffff", textShadow: "0 0 7px #ffb3d9, 0 0 18px #ff6fae, 0 0 36px #ff4fa0, 0 0 60px #9a6bff", animation: "flick 5s infinite" },
+  roster: { display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 10 },
+  chip: { fontSize: 11, padding: "3px 9px", borderRadius: 999, border: "1px solid", background: "rgba(0,0,0,0.25)" },
+  voicePicker: { display: "flex", alignItems: "center", gap: 6, justifyContent: "center", marginTop: 10, fontSize: 11 },
+  voiceCfgBtn: { background: "rgba(255,255,255,0.07)", color: "#f3e6d8", border: "1px solid #5a3a48", borderRadius: 999, padding: "5px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" },
+  nowPlaying: { marginTop: 8, fontSize: 11, color: "#9fe3f5", opacity: 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  ytMini: { position: "absolute", right: 10, bottom: 150, width: 132, height: 74, borderRadius: 10, overflow: "hidden", border: "1px solid #5a3a48", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 15, background: "#000" },
+  playerRow: { display: "flex", justifyContent: "center", alignItems: "center", gap: 16, margin: "6px 0 14px" },
+  pBtn: { width: 48, height: 48, borderRadius: "50%", background: "rgba(255,255,255,0.08)", border: "1px solid #5a3a48", color: "#fff", fontSize: 18, cursor: "pointer" },
+  pBtnMain: { width: 58, height: 58, fontSize: 22, background: "linear-gradient(135deg,#e85d92,#c43c72)", border: "none" },
+  volRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 },
+  trackList: { maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 },
+  trackItem: { textAlign: "left", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#d8c4cd", fontSize: 13, padding: "9px 12px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  trackActive: { background: "rgba(92,193,221,0.16)", border: "1px solid #3a6b78", color: "#9fe3f5", fontWeight: 700 },
+  ytLink: { flex: 1, textAlign: "center", fontSize: 11, color: "#9fe3f5", textDecoration: "none", background: "rgba(92,193,221,0.1)", border: "1px solid #3a6b78", borderRadius: 8, padding: "8px 6px" },
+  vRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" },
+  vAvatar: { width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 15, flexShrink: 0 },
+  vSelect: { flex: 1, minWidth: 0, background: "rgba(255,255,255,0.08)", color: "#f3e6d8", border: "1px solid #5a3a48", borderRadius: 8, padding: "7px 6px", fontSize: 12, fontFamily: "inherit" },
+  vTest: { flexShrink: 0, background: "rgba(243,212,137,0.12)", color: "#f3d489", border: "1px solid #6a4b2e", borderRadius: 8, padding: "7px 10px", fontSize: 14, cursor: "pointer" },
+  main: { flex: 1, overflowY: "auto", padding: "16px 14px 8px", display: "flex", flexDirection: "column", gap: 14 },
+  userRow: { display: "flex", justifyContent: "flex-end" },
+  userBubble: { maxWidth: "78%", background: "linear-gradient(135deg,#ff9ecb,#ff6fae)", color: "#3a0f25", padding: "10px 14px", borderRadius: "16px 16px 4px 16px", fontSize: 14, fontWeight: 600, boxShadow: "0 2px 10px rgba(255,111,174,0.35)" },
+  castRow: { display: "flex", gap: 10, alignItems: "flex-start" },
+  avatar: { width: 38, height: 38, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 19, flexShrink: 0, marginTop: 18 },
+  nameTag: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 3, fontSize: 13, flexWrap: "wrap" },
+  subTag: { fontSize: 10, opacity: 0.6 },
+  castBubble: { background: "rgba(255,255,255,0.06)", border: "1px solid", padding: "10px 13px", borderRadius: "4px 16px 16px 16px", fontSize: 14, lineHeight: 1.55, color: "#f6ecdf" },
+  typing: { display: "flex", alignItems: "center", paddingLeft: 48, fontSize: 12 },
+  note: { fontSize: 11, color: "#f3c98a", background: "rgba(243,201,138,0.08)", padding: "8px 14px", lineHeight: 1.5 },
+  errNote: { fontSize: 11, color: "#ff9c9c", background: "rgba(255,90,90,0.1)", padding: "8px 14px", lineHeight: 1.5, wordBreak: "break-all" },
+  menuRow: { display: "flex", gap: 8, overflowX: "auto", padding: "8px 14px", borderTop: "1px solid #2e1b27" },
+  menuItem: { whiteSpace: "nowrap", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "rgba(243,212,137,0.08)", border: "1px solid #6a4b2e", color: "#f3e6d8", fontSize: 12, padding: "7px 12px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit" },
+  price: { fontSize: 10, color: "#f3d489" },
+  inputBar: { display: "flex", gap: 6, padding: "10px 12px 16px", alignItems: "center", width: "100%" },
+  micBtn: { width: 44, height: 46, flexShrink: 0, borderRadius: "50%", background: "rgba(255,255,255,0.08)", border: "1px solid #5a3a48", color: "#fff", fontSize: 18, cursor: "pointer" },
+  micOn: { background: "linear-gradient(135deg,#e85d92,#c43c72)", border: "none", animation: "pulse 1.3s infinite" },
+  input: { flex: 1, minWidth: 0, width: 0, background: "rgba(255,255,255,0.07)", border: "1px solid #4a2f3f", color: "#fff", padding: "12px 12px", borderRadius: 14, fontSize: 16, outline: "none", fontFamily: "inherit" },
+  sendBtn: { flexShrink: 0, background: "linear-gradient(135deg,#e85d92,#c43c72)", color: "#fff", border: "none", padding: "0 14px", height: 46, borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  overlay: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", zIndex: 20 },
+  bill: { width: "100%", background: "linear-gradient(180deg,#241420,#1a0f17)", borderTop: "1px solid #5a3a48", borderRadius: "20px 20px 0 0", padding: "20px 18px 24px" },
+  billTitle: { textAlign: "center", fontFamily: "'Zen Maru Gothic',sans-serif", fontWeight: 700, fontSize: 18, color: "#ff8fc6", marginBottom: 14 },
+  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 14 },
+  billSec: { marginTop: 16, marginBottom: 8, fontSize: 13, color: "#f3d489", fontWeight: 700 },
+  memoBox: { background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "8px 12px", marginTop: 6, fontSize: 12, lineHeight: 1.7, color: "#d8c4cd" },
+  memoLine: { whiteSpace: "normal" },
+  resetBtn: { marginTop: 10, background: "transparent", border: "1px solid #6a4b2e", color: "#caa9b5", fontSize: 12, padding: "8px 12px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit" },
+  chargeRow: { display: "flex", gap: 8 },
+  chargeBtn: { flex: 1, background: "rgba(243,212,137,0.12)", border: "1px solid #6a4b2e", color: "#f3d489", fontWeight: 700, fontSize: 14, padding: "11px 0", borderRadius: 12, cursor: "pointer", fontFamily: "inherit" },
+  bottleBtn: { width: "100%", marginTop: 12, background: "rgba(220,171,83,0.14)", border: "1px solid #6a4b2e", color: "#f3e6d8", fontSize: 13, padding: "12px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit" },
+  billNote: { marginTop: 14, fontSize: 11, lineHeight: 1.6, color: "#caa9b5", background: "rgba(255,255,255,0.04)", padding: "10px 12px", borderRadius: 10 },
+  closeBtn: { width: "100%", marginTop: 14, background: "linear-gradient(135deg,#e85d92,#c43c72)", color: "#fff", border: "none", padding: "13px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+};
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700&family=Zen+Maru+Gothic:wght@500;700&family=Noto+Sans+JP:wght@500&display=swap');
+* { box-sizing: border-box; }
+::-webkit-scrollbar { width: 0; height: 0; }
+@keyframes flick { 0%,92%,100%{opacity:1} 93%{opacity:.45} 95%{opacity:1} 96%{opacity:.6} 97%{opacity:1} }
+.dot { width:6px;height:6px;border-radius:50%;background:#f3d489;display:inline-block;margin-right:4px;animation:bounce 1.2s infinite }
+.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-5px);opacity:1} }
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(232,93,146,.6)} 70%{box-shadow:0 0 0 12px rgba(232,93,146,0)} 100%{box-shadow:0 0 0 0 rgba(232,93,146,0)} }
+.speaking { animation: talk .6s infinite alternate; }
+@keyframes talk { from{ box-shadow:0 0 10px var(--gw) } to{ box-shadow:0 0 22px var(--gw), 0 0 34px var(--gw) } }
+button:disabled { opacity:.45; cursor:not-allowed; }
+input:focus { border-color:#e85d92; }
+select:focus { outline: none; border-color:#e85d92; }
+`;
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
