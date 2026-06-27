@@ -73,12 +73,11 @@ const WELCOME = [
 
 // 店内BGM：あなたのオリジナル曲メドレー（YouTube）
 const YT_TRACKS = [
-  { id: "6_qHbcYRflk", name: "オリジナル曲メドレー ①" },
-  { id: "kWf6eckZO5s", name: "オリジナル曲メドレー ②" },
+  { id: "wxitFdP7bJs", name: "寝落ちBGM 3時間（オリジナル）" },
 ];
 
 // BGMはプレビュー枠だと不安定なので今は非表示。公開時に true にすれば復活する。
-const BGM_ENABLED = false;
+const BGM_ENABLED = true;
 
 // 保存は端末のlocalStorageを使う（公開サイト版）
 const storage = {
@@ -215,7 +214,7 @@ function App() {
   useEffect(() => { setYtReady(true); }, []); // スクリプト読み込み不要
 
   function ytEmbedSrc(id) {
-    return `https://www.youtube-nocookie.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1`;
+    return `https://www.youtube-nocookie.com/embed/${id}?enablejsapi=1&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&loop=1&playlist=${id}`;
   }
   function ytPost(func, args = []) {
     const w = ytIframeRef.current?.contentWindow;
