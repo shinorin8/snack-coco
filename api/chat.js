@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001", // 一番安いモデル。会話用に十分
-        max_tokens: 1000,
+        max_tokens: 600,
         messages: [{ role: "user", content: prompt }],
       }),
     });
